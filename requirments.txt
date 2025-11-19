@@ -1,0 +1,7 @@
+gymnasium
+yfinance
+pandas
+numpy
+matplotlib
+seaborn
+torch

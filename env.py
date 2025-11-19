@@ -1,12 +1,10 @@
 import gymnasium as gym
 from gymnasium import spaces
-import yfinance as yf
 import numpy as np
-import datetime as dt
 import matplotlib.pyplot as plt
 from numpy._core.multiarray import dtype
 
-class TraidingEnv(gym.Env):
+class TradingEnv(gym.Env):
     """
     state 요소
     1. 현재 잔고(balance)
@@ -20,7 +18,7 @@ class TraidingEnv(gym.Env):
         max_initial_balance: float = 100_000.0,
         trading_unit: int = 10):
 
-        super(TraidingEnv, self).__init__()
+        super(TradingEnv, self).__init__()
         
         self.min_initial_balance = min_initial_balance
         self.max_initial_balance = max_initial_balance
@@ -34,16 +32,6 @@ class TraidingEnv(gym.Env):
             shape = (8, ),
             dtype = np.float32
         )
-
-        #data 불러오기
-        ticker = yf.Ticker(code)
-        df = ticker.history(
-            interval = "1d",
-            start = self.start_date,
-            end = self.end_date,
-            auto_adjust = False
-            )
-        self.df = df
 
         self.prices = df[["Open", "High", "Low", "Close", "Volume"]].to_numpy(dtype = np.float32)
         self.n_steps = len(self.prices) # step 수
