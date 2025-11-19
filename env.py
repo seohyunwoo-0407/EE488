@@ -15,16 +15,16 @@ class TraidingEnv(gym.Env):
     """
     def __init__(
         self,
-        balance: float = 10_000.0, #잔고
-        start_date: str = "2020-10-19",
-        end_date: str = "2024-10-25",
-        code: str = "AAPL"):
+        df,
+        min_initial_balance: float = 10_000.0, 
+        max_initial_balance: float = 100_000.0,
+        trading_unit: int = 10):
 
-        self.initial_balance = balance
-        self.start_date = dt.datetime.strptime(start_date, "%Y-%m-%d")
-        self.end_date = dt.datetime.strptime(end_date, "%Y-%m-%d")
-        self.code = code
-
+        super(TraidingEnv, self).__init__()
+        
+        self.min_initial_balance = min_initial_balance
+        self.max_initial_balance = max_initial_balance
+        self.trading_unit = trading_unit
 
         # state/action 정의
 
@@ -76,7 +76,7 @@ class TraidingEnv(gym.Env):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self.current_step = 0
-        self.balance = float(self.initial_balance) # Modified: Use initial_balance directly
+        self.balance = np.random.uniform(self.min_initial_balance, self.max_initial_balance)
         self.shares = 0.0
 
         price = self.get_price()
@@ -88,34 +88,40 @@ class TraidingEnv(gym.Env):
     def step(self, action, count):
         assert self.action_space.contains(action) #action이 0,1,2중 하나인지 확인
 
-        price = self.get_price()
+        current_price = self.get_price()
 
         prev_value = self.portfolio_value #이번스텝 시작할때 포트폴리오 가치
 
         if action == 0: # sell
-            if self.shares >= count:
-                self.shares -= count
-                self.balance += price*count
+            sell_amount = min(self.shares, self.trading_unit) #N주 매도, 보유량이 적으면 전액 매도
+            if sell_amount > 0:
+                self.shares -= sell_amount
+                self.balance += current_price*sell_amount
         elif action == 1: # hold
             pass
         elif action == 2: # buy
-            if self.balance >= price: # 잔고가 가격보다 크면
-                self.shares += count
-                self.balance -= price*count # 산만큼 잔고에서 뺌
+            #N주 매수, 잔고 부족이면 매수 X
+            cost = current_price * self.trading_unit
+            if self.balance >= cost:
+                self.shares += self.trading_unit
+                self.balance -= cost
+            else:
+                pass #잔고 부족이면 매수 X  
         else:
             raise Exception("no valid action")
 
         self.current_step += 1 #step 증가
-        if self.current_step >= self.n_steps:
-            done = True
-        else:
-            done = False
+        terminated = self.current_step >= (self.n_steps - 1)
         truncated = False #내가 임의로 조기 종료시킬때
 
-        price = self.get_price() #그 날의 종가
-        self.portfolio_value = self.balance + self.shares * price #포트폴리오 업데이트
+        if not terminated:
+            next_price = self.get_price()
+        else:
+            next_price = current_price
 
-        reward = (self.portfolio_value - prev_value) / max(prev_value, 1.0)
+        self.portfolio_value = self.balance + self.shares * next_price #포트폴리오 업데이트
+
+        reward = (self.portfolio_value - prev_value) / max(prev_value, 1e-8) ## r_t = (V_t - V_{t-1}) / V_{t-1}
 
         obs = self.get_observation()
         info = {
@@ -124,4 +130,4 @@ class TraidingEnv(gym.Env):
             "shares": self.shares,
             "action": action
         }
-        return obs, reward, done, truncated, info
+        return obs, reward, terminated, truncated, info
